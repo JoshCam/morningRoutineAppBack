@@ -4,7 +4,7 @@ const sha256 = require("sha256");
 const cors = require("cors");
 const { default: axios } = require("axios");
 const app = express();
-// require("dotenv").config();
+require("dotenv").config();
 // .env crashes the script!
 
 app.use(express.json());
@@ -22,6 +22,7 @@ connection.mysql = mysql.createConnection({
 connection.mysql.connect();
 
 app.post("/register", (request, response) => {
+  // Registers user and adds their details to db
   const hashpassword = sha256(request.body.password + "Morning");
   const query = `INSERT INTO users (username, email, hashpassword) VALUES (?,?,?)`;
   const values = [request.body.username, request.body.email, hashpassword];
@@ -32,8 +33,9 @@ app.post("/register", (request, response) => {
 });
 
 app.post("/login", (request, response) => {
+  // Logs user in and stores a token on login
   const hashpassword = sha256(request.body.password + "Morning");
-  const query = `SELECT * FROM users WHERE username = ? AND hashpassword = ?`;
+  const query = `SELECT * , userid FROM users WHERE username = ? AND hashpassword = ?`;
   const values = [request.body.username, hashpassword];
 
   connection.mysql.query(query, values, (error, results) => {
@@ -44,10 +46,10 @@ app.post("/login", (request, response) => {
       const token = Math.random() * 10000000000000000;
 
       // Adds Token to db
-      // const query = `INSERT INTO tokens (token) VALUES ("${token}");`;
-      // connection.mysql.query(query, (error, result) => {
-      //   console.log("token stored!");
-      // });
+      const query = `INSERT INTO tokens (token, user_id) VALUES ("${token}", ${results[0].userid});`;
+      connection.mysql.query(query, (error, result) => {
+        console.log("token stored!");
+      });
 
       response.json({ token });
     } else {
@@ -56,34 +58,23 @@ app.post("/login", (request, response) => {
   });
 });
 
-app.post("/commute", (request, response) => {
-  const home = request.body.home;
-  const work = request.body.work;
-  // console.log(home);
-  // console.log(work);
+app.post("/commute", async (request, response) => {
+  // Works out commute time with google matrix API
+  const { home, work } = request.body;
 
-  let googURL =
-    "https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=" +
-    home.lat +
-    "," +
-    home.lng +
-    "&destinations=" +
-    work.lat +
-    "," +
-    work.lng +
-    "&key=AIzaSyDvGymWobmXGa0CtbocnF1jwGt0AX9mkeM";
+  let googURL = `${process.env.GOOGLEMAPSURL}?units=imperial&origins=${home.lat},${home.lng}&destinations=${work.lat},${work.lng}&key=${process.env.GOOGLEAPIKEY}`;
 
-  async function asyncFunc() {
-    // fetch data from a url endpoint
-    const response = await axios.get(googURL);
-    const data = await response.data.rows[0].elements[0].duration.value;
+  const results = await axios.get(googURL);
+  const data = results.data.rows[0].elements[0].duration.value;
+  response.send({ data });
+});
 
-    return data;
-  }
-  (async function sendData() {
-    // console.log(await asyncFunc());
-    response.send({ data: await asyncFunc() });
-  })();
+app.get("/check_token", (request, response) => {
+  console.log("checking token");
+
+  const query = `SELECT count(*) as count, userid FROM tokens
+                    WHERE token = "${request.headers.token}";`;
+  console.log(query);
 });
 
 // If the processing environment has a port use it, else use 6001
