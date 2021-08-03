@@ -35,10 +35,10 @@ app.post("/register", (request, response) => {
 app.post("/login", (request, response) => {
   // Logs user in and stores a token on login
   const hashpassword = sha256(request.body.password + "Morning");
-  const query = `SELECT * , userid FROM users WHERE username = ? AND hashpassword = ?`;
+  const checkPasswordQuery = `SELECT * , user_id FROM users WHERE username = ? AND hashpassword = ?`;
   const values = [request.body.username, hashpassword];
 
-  connection.mysql.query(query, values, (error, results) => {
+  connection.mysql.query(checkPasswordQuery, values, (error, results) => {
     if (error) {
       response.send({ error });
     }
@@ -46,15 +46,29 @@ app.post("/login", (request, response) => {
       const token = Math.random() * 10000000000000000;
 
       // Adds Token to db
-      const query = `INSERT INTO tokens (token, user_id) VALUES ("${token}", ${results[0].userid});`;
-      connection.mysql.query(query, (error, result) => {
-        console.log("token stored!");
+      const insertTokenQuery = `INSERT INTO tokens (token, user_id) VALUES ("${token}", ${results[0].user_id});`;
+      connection.mysql.query(insertTokenQuery, (error, results) => {
+        //
       });
 
-      response.json({ token });
+      response.json({ token, loginSuccess: true });
     } else {
-      response.send({ message: "Wrong Username or Password" });
+      response.json({ loginSuccess: false });
     }
+  });
+});
+
+app.post("/get_tasks", (request, response) => {
+  // Logs user in and stores a token on login
+
+  const getTasksQuery = `SELECT DISTINCT task, length FROM tokens
+	                            LEFT JOIN tasks ON tokens.user_id = tokens.user_id
+	                            WHERE token = "${request.body.token}";`;
+  console.log(getTasksQuery);
+
+  connection.mysql.query(getTasksQuery, (error, results) => {
+    console.log(error, results);
+    response.json({ results });
   });
 });
 
@@ -70,11 +84,32 @@ app.post("/commute", async (request, response) => {
 });
 
 app.get("/check_token", (request, response) => {
-  console.log("checking token");
-
-  const query = `SELECT count(*) as count, userid FROM tokens
+  const query = `SELECT user_id FROM tokens
                     WHERE token = "${request.headers.token}";`;
+  connection.mysql.query(query, (error, result) => {
+    response.json(result[0].user_id);
+  });
+});
+
+app.post("/add_task", (request, response) => {
+  const query = `INSERT INTO tasks (user_id, task, length) VALUES
+                       ("${request.body.user_id}", "${request.body.task}", "${request.body.time}");`;
   console.log(query);
+  connection.mysql.query(query, (error, result) => {
+    console.log("Added task");
+  });
+  // THINGS I WANT TO DO NEXT:
+  // -make it so duplicates are removed - Might be able to just use the "selectedTasks" reducer?
+  // On loading check if the user has any tasks associated with them in the DB and load them through as default
+});
+
+app.get("/users_tasks", (request, response) => {
+  const query = `SELECT task, length FROM tasks
+	                  WHERE user_id = ${request.headers.user_id};`;
+  connection.mysql.query(query, (error, result) => {
+    console.log(error, result);
+    response.send(result);
+  });
 });
 
 // If the processing environment has a port use it, else use 6001
