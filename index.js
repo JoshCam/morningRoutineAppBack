@@ -64,10 +64,8 @@ app.post("/get_tasks", (request, response) => {
   const getTasksQuery = `SELECT DISTINCT task, length FROM tokens
 	                            LEFT JOIN tasks ON tokens.user_id = tokens.user_id
 	                            WHERE token = "${request.body.token}";`;
-  console.log(getTasksQuery);
 
   connection.mysql.query(getTasksQuery, (error, results) => {
-    console.log(error, results);
     response.json({ results });
   });
 });
