@@ -5,7 +5,6 @@ const cors = require("cors");
 const { default: axios } = require("axios");
 const app = express();
 require("dotenv").config();
-// .env crashes the script!
 
 app.use(express.json());
 app.use(cors());
@@ -60,13 +59,16 @@ app.post("/login", (request, response) => {
 
 app.post("/get_tasks", (request, response) => {
   // Logs user in and stores a token on login
-
   const getTasksQuery = `SELECT DISTINCT task, length FROM tokens
 	                            LEFT JOIN tasks ON tokens.user_id = tokens.user_id
 	                            WHERE token = "${request.body.token}";`;
 
   connection.mysql.query(getTasksQuery, (error, results) => {
-    response.json({ results });
+    if (!error) {
+      response.json({ results });
+    } else {
+      console.log("GET TASKS ERROR", error);
+    }
   });
 });
 
@@ -82,6 +84,7 @@ app.post("/commute", async (request, response) => {
 });
 
 app.get("/check_token", (request, response) => {
+  // Sends users ID using their current token
   const query = `SELECT user_id FROM tokens
                     WHERE token = "${request.headers.token}";`;
   connection.mysql.query(query, (error, result) => {
@@ -90,23 +93,35 @@ app.get("/check_token", (request, response) => {
 });
 
 app.post("/add_task", (request, response) => {
+  // Adds a task to tasks DB and links it to their user ID
   const query = `INSERT INTO tasks (user_id, task, length) VALUES
                        ("${request.body.user_id}", "${request.body.task}", "${request.body.time}");`;
   console.log(query);
   connection.mysql.query(query, (error, result) => {
     console.log("Added task");
   });
-  // THINGS I WANT TO DO NEXT:
-  // -make it so duplicates are removed - Might be able to just use the "selectedTasks" reducer?
-  // On loading check if the user has any tasks associated with them in the DB and load them through as default
 });
 
 app.get("/users_tasks", (request, response) => {
+  // Gets users tasks from tasks db using their user ID
   const query = `SELECT task, length FROM tasks
 	                  WHERE user_id = ${request.headers.user_id};`;
   connection.mysql.query(query, (error, result) => {
-    console.log(error, result);
-    response.send(result);
+    if (!error) {
+      response.send(result);
+    } else {
+      console.log("USERS TASKS ERROR", error);
+    }
+  });
+});
+
+app.post("/remove_task", (request, response) => {
+  const query = `DELETE FROM tasks WHERE (user_id = "${request.body.user_id}") AND (task = '${request.body.task}');`;
+
+  connection.mysql.query(query, (error, result) => {
+    console.log(
+      "removed task " + request.body.task + " for user " + request.body.user_id
+    );
   });
 });
 
