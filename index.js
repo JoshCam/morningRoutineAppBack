@@ -59,12 +59,13 @@ app.post("/login", (request, response) => {
 
 app.post("/get_tasks", (request, response) => {
   // Logs user in and stores a token on login
-  const getTasksQuery = `SELECT DISTINCT task, length FROM tokens
+  const getTasksQuery = `SELECT task, length FROM tokens
 	                            LEFT JOIN tasks ON tokens.user_id = tokens.user_id
 	                            WHERE token = "${request.body.token}";`;
 
   connection.mysql.query(getTasksQuery, (error, results) => {
     if (!error) {
+      results.reverse();
       response.json({ results });
     } else {
       console.log("GET TASKS ERROR", error);
@@ -75,7 +76,7 @@ app.post("/get_tasks", (request, response) => {
 app.post("/commute", async (request, response) => {
   // Works out commute time with google matrix API
   const { home, work } = request.body;
-
+  if (Object.keys(work).length === 0 || Object.keys(home).length === 0) return;
   let googURL = `${process.env.GOOGLEMAPSURL}?units=imperial&origins=${home.lat},${home.lng}&destinations=${work.lat},${work.lng}&key=${process.env.GOOGLEAPIKEY}`;
 
   const results = await axios.get(googURL);
@@ -94,21 +95,21 @@ app.get("/check_token", (request, response) => {
 
 app.post("/add_task", (request, response) => {
   // Adds a task to tasks DB and links it to their user ID
-  const query = `INSERT INTO tasks (user_id, task, length) VALUES
+  const query = `INSERT IGNORE tasks (user_id, task, length) VALUES
                        ("${request.body.user_id}", "${request.body.task}", "${request.body.time}");`;
-  console.log(query);
-  connection.mysql.query(query, (error, result) => {
-    console.log("Added task");
+  connection.mysql.query(query, (error, results) => {
+    console.log("Added task", error, results);
   });
 });
 
 app.get("/users_tasks", (request, response) => {
   // Gets users tasks from tasks db using their user ID
   const query = `SELECT task, length FROM tasks
-	                  WHERE user_id = ${request.headers.user_id};`;
+	                  WHERE user_id = ${request.headers.user_id}`;
   connection.mysql.query(query, (error, result) => {
     if (!error) {
       response.send(result);
+      console.log(result);
     } else {
       console.log("USERS TASKS ERROR", error);
     }
@@ -116,12 +117,20 @@ app.get("/users_tasks", (request, response) => {
 });
 
 app.post("/remove_task", (request, response) => {
-  const query = `DELETE FROM tasks WHERE (user_id = "${request.body.user_id}") AND (task = '${request.body.task}');`;
+  const query = `DELETE FROM tasks WHERE user_id = "${request.body.user_id}" AND task = "${request.body.task}";`;
 
   connection.mysql.query(query, (error, result) => {
     console.log(
       "removed task " + request.body.task + " for user " + request.body.user_id
     );
+  });
+});
+
+app.get("/get_time/:user_id", (request, response) => {
+  const query = `SELECT SUM(length) as length FROM tasks
+	WHERE user_id = ${request.params.user_id};`;
+  connection.mysql.query(query, (error, results) => {
+    response.json(results);
   });
 });
 
