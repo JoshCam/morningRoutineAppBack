@@ -3,6 +3,7 @@ const mysql = require("mysql");
 const sha256 = require("sha256");
 const cors = require("cors");
 const { default: axios } = require("axios");
+const { request } = require("express");
 const app = express();
 require("dotenv").config();
 
@@ -23,7 +24,7 @@ connection.mysql.connect();
 app.post("/register", (request, response) => {
   // Registers user and adds their details to db
   const hashpassword = sha256(request.body.password + "Morning");
-  const query = `INSERT INTO users (username, email, hashpassword) VALUES (?,?,?)`;
+  const query = `INSERT IGNORE users (username, email, hashpassword) VALUES (?,?,?)`;
   const values = [request.body.username, request.body.email, hashpassword];
 
   connection.mysql.query(query, values, (error, results) => {
@@ -77,11 +78,17 @@ app.post("/commute", async (request, response) => {
   // Works out commute time with google matrix API
   const { home, work } = request.body;
   if (Object.keys(work).length === 0 || Object.keys(home).length === 0) return;
-  let googURL = `${process.env.GOOGLEMAPSURL}?units=imperial&origins=${home.lat},${home.lng}&destinations=${work.lat},${work.lng}&key=${process.env.GOOGLEAPIKEY}`;
+  let googURL = `${process.env.GOOGLEMAPSURL}?units=imperial&origins=${home.lat},${home.lng}
+                    &destinations=${work.lat},${work.lng}&key=${process.env.GOOGLEAPIKEY}`;
 
   const results = await axios.get(googURL);
-  const data = results.data.rows[0].elements[0].duration.value;
-  response.send({ data });
+  console.log(results.data.rows[0]);
+  try {
+    const data = results.data.rows[0].elements[0].duration.value;
+    response.send({ data, success: true });
+  } catch (error) {
+    response.send({ success: false });
+  }
 });
 
 app.get("/check_token", (request, response) => {
@@ -127,10 +134,46 @@ app.post("/remove_task", (request, response) => {
 });
 
 app.get("/get_time/:user_id", (request, response) => {
+  console.log(request.params.user_id);
   const query = `SELECT SUM(length) as length FROM tasks
 	WHERE user_id = ${request.params.user_id};`;
   connection.mysql.query(query, (error, results) => {
     response.json(results);
+  });
+});
+
+app.post("/add_user_info", (request, response) => {
+  // Adds users info to db
+  const query = `INSERT IGNORE user_info
+                 (user_id, start_work, work_lat, work_lng)
+                  values (${request.body.user_id}, "${request.body.start_work}",
+                  ${request.body.work_location.lat}, ${request.body.work_location.lng});`;
+
+  // const query = `UPDATE user_info
+  //                 SET start_work = "${request.body.start_work}", work_lat = ${request.body.work_location.lat}, work_lng = ${request.body.work_location.lng}
+  //                 WHERE user_id = ${request.body.user_id};`;
+
+  //   const query = `INSERT INTO subs
+  //   (subs_name, subs_email, subs_birthday)
+  // VALUES
+  //   (?, ?, ?)
+  // ON DUPLICATE KEY UPDATE
+  //   subs_name     = VALUES(subs_name),
+  //   subs_birthday = VALUES(subs_birthday)`;
+
+  connection.mysql.query(query, (error, results) => {
+    console.log("added user Info");
+  });
+});
+
+app.get("/get_user_info/:user_id", (request, response) => {
+  if (request.params.user_id == 0) return;
+  // Gets Users info from db
+  const query = `SELECT start_work, work_lat, work_lng FROM morning_routine.user_info
+	                WHERE user_id = ${request.params.user_id};`;
+  connection.mysql.query(query, (error, results) => {
+    // console.log(error, results);
+    response.send(results);
   });
 });
 
