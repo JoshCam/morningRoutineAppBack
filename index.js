@@ -28,7 +28,7 @@ app.post("/register", (request, response) => {
   const values = [request.body.username, request.body.email, hashpassword];
 
   connection.mysql.query(query, values, (error, results) => {
-    console.log(error, results);
+    // console.log(error, results);
   });
 });
 
@@ -61,7 +61,7 @@ app.post("/login", (request, response) => {
 app.post("/get_tasks", (request, response) => {
   // Logs user in and stores a token on login
   const getTasksQuery = `SELECT task, length FROM tokens
-	                            LEFT JOIN tasks ON tokens.user_id = tokens.user_id
+	                            LEFT JOIN tasks ON tokens.user_id = tasks.user_id
 	                            WHERE token = "${request.body.token}";`;
 
   connection.mysql.query(getTasksQuery, (error, results) => {
@@ -82,7 +82,6 @@ app.post("/commute", async (request, response) => {
                     &destinations=${work.lat},${work.lng}&key=${process.env.GOOGLEAPIKEY}`;
 
   const results = await axios.get(googURL);
-  console.log(results.data.rows[0]);
   try {
     const data = results.data.rows[0].elements[0].duration.value;
     response.send({ data, success: true });
@@ -134,7 +133,6 @@ app.post("/remove_task", (request, response) => {
 });
 
 app.get("/get_time/:user_id", (request, response) => {
-  console.log(request.params.user_id);
   const query = `SELECT SUM(length) as length FROM tasks
 	WHERE user_id = ${request.params.user_id};`;
   connection.mysql.query(query, (error, results) => {
@@ -166,13 +164,22 @@ app.post("/add_user_info", (request, response) => {
   });
 });
 
+app.put("/update_user_info", (request, response) => {
+  // Updates users commute info i.e. when they wake up, if they commute and where they work!
+  const query = `UPDATE user_info
+                  SET start_work = "${request.body.start_work}", work_lat = ${request.body.work_location.lat}, work_lng = ${request.body.work_location.lng}
+                  WHERE user_id = ${request.body.user_id};`;
+  connection.mysql.query(query, (error, results) => {
+    console.log("Updated user Info");
+  });
+});
+
 app.get("/get_user_info/:user_id", (request, response) => {
-  if (request.params.user_id == 0) return;
+  if (request.params.user_id == null) return;
   // Gets Users info from db
   const query = `SELECT start_work, work_lat, work_lng FROM morning_routine.user_info
 	                WHERE user_id = ${request.params.user_id};`;
   connection.mysql.query(query, (error, results) => {
-    // console.log(error, results);
     response.send(results);
   });
 });
